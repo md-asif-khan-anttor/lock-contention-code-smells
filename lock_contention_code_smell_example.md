@@ -163,8 +163,72 @@ public class SameLock {
 ```
 
 ---
+## 4. Overly Split Locks
 
-## 4. Loop Inside Critical Section (LIC)
+**Definition:**
+Overly split locks occur when locks are excessively divided, often in an effort to mitigate a critical section. However, this division can degrade performance. The slowdown is typically caused by the overhead of repeatedly acquiring and releasing locks rather than by contention or the execution time within the locks.
+
+### Example Code:
+```java
+public class OverlySplit {
+    private static List<Integer> buffer = new ArrayList<>();
+    private static int foo;
+    private static int bar;
+
+    private static void addToBuffer(int x, int y) {
+        try {
+            synchronized (buffer) {
+                buffer.add(x);
+                // replace by sleep statement for benchmarking
+            }
+            foo = bar;
+            
+            synchronized (buffer) {
+                buffer.add(y);
+                // replace by sleep statement for benchmarking
+            }
+            synchronized (buffer) {
+                if (!buffer.isEmpty()) {
+                    buffer.remove(0);
+                    // replace by sleep statement for benchmarking
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+### Recommendation:
+Data lock coarsening can enhance performance by reducing repetitive locking on the same object within a Java method. It involves merging adjacent synchronized blocks that use the same lock, thereby reducing synchronization overhead by consolidating multiple lock acquisitions and releases into a single operation.
+
+### Refactored Code:
+```java
+private static void addToBuffer(int x, int y) {
+    try {
+        synchronized (buffer) {
+            buffer.add(x); 
+            // replace by sleep statement for benchmarking
+            foo = bar;
+            buffer.add(y);
+            // replace by sleep statement for benchmarking
+            if (!buffer.isEmpty()) {
+                buffer.remove(0);
+                // replace by sleep statement for benchmarking
+            }
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+}
+
+```
+
+---
+
+## 5. Loop Inside Critical Section (LIC)
 
 **Definition:**
 A loop inside a critical section prolongs execution time unnecessarily, increasing contention.
