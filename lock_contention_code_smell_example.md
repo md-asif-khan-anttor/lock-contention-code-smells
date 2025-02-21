@@ -14,8 +14,9 @@ public class SynchronizedMethod {
     public final Set<String> users;
     public final Set<String> queries;
 
+    // Synchronizing entire methods causes contention
     public synchronized void addUser(String u) { 
-        users.add(u); 
+        users.add(u);  // Other threads are blocked while this executes
     }
     public synchronized void addQuery(String q) { 
         queries.add(q);
@@ -38,13 +39,14 @@ public class SynchronizedMethod {
     public final Set<String> users; 
     public final Set<String> queries;
 
+    // Synchronizing only on specific objects instead of entire methods
     public void addUser(String u) {
-        synchronized (users) {
+        synchronized (users) {  // Only locking 'users' set
             users.add(u); 
         }
     }
     public void addQuery(String q) {
-        synchronized (queries) {
+        synchronized (queries) {  // Only locking 'queries' set
             queries.add(q);
         }
     }
@@ -59,6 +61,7 @@ public class SynchronizedMethod {
         }
     }
 }
+
 ```
 
 ---
@@ -76,13 +79,13 @@ public class UnifiedLocking {
     private final List<String> items = new ArrayList<>();
 
     public void incrementCounter() {
-        synchronized (lock) {
+        synchronized (lock) {  // Using the same lock for unrelated tasks
            ++counter; 
         }
     }
 
     public void addItem(String item) {
-        synchronized (lock) {
+        synchronized (lock) {  // Causes unnecessary contention
             items.add(item);
         }
     }
@@ -100,7 +103,7 @@ public class UnifiedLocking {
     private final List<String> items = new ArrayList<>();
 
     public void incrementCounter() {
-        lock.lock();
+        lock.lock();  // Locking only when needed
         try {
             ++counter;
         } finally {
@@ -109,7 +112,7 @@ public class UnifiedLocking {
     }
 
     public void addItem(String item) {
-        lock.lock();
+        lock.lock();  // Reducing contention by using separate locking
         try {
             items.add(item);
         } finally {
@@ -132,13 +135,13 @@ public class SameLock {
     int counter;
     
     public void task1() {
-        synchronized(counter) {
+        synchronized(counter) {  // Incorrect: counter is an int, which is immutable
             counter.toString();
         }
     }
     
     public void task2() {
-        synchronized(counter) {
+        synchronized(counter) {  // Incorrect: locking on an integer
             counter += 1;
         }
     }
@@ -154,10 +157,11 @@ public class SameLock {
     private final AtomicInteger counter = new AtomicInteger();
 
     public void task1() {
-        counter.toString();
+        counter.toString();  // No locking needed as AtomicInteger is thread-safe
     }
+    
     public void task2() {
-        counter.incrementAndGet();
+        counter.incrementAndGet();  // Atomic operation avoids synchronization issues
     }
 }
 ```
@@ -177,20 +181,17 @@ public class OverlySplit {
 
     private static void addToBuffer(int x, int y) {
         try {
-            synchronized (buffer) {
+            synchronized (buffer) {  // First lock acquisition
                 buffer.add(x);
-                // replace by sleep statement for benchmarking
             }
             foo = bar;
             
-            synchronized (buffer) {
+            synchronized (buffer) {  // Second lock acquisition (unnecessary split)
                 buffer.add(y);
-                // replace by sleep statement for benchmarking
             }
-            synchronized (buffer) {
+            synchronized (buffer) {  // Third lock acquisition (again split)
                 if (!buffer.isEmpty()) {
                     buffer.remove(0);
-                    // replace by sleep statement for benchmarking
                 }
             }
         } catch (Exception e) {
@@ -208,22 +209,18 @@ Data lock coarsening can enhance performance by reducing repetitive locking on t
 ```java
 private static void addToBuffer(int x, int y) {
     try {
-        synchronized (buffer) {
+        synchronized (buffer) {  // Merging locks into one block
             buffer.add(x); 
-            // replace by sleep statement for benchmarking
             foo = bar;
             buffer.add(y);
-            // replace by sleep statement for benchmarking
             if (!buffer.isEmpty()) {
                 buffer.remove(0);
-                // replace by sleep statement for benchmarking
             }
         }
     } catch (Exception e) {
         e.printStackTrace();
     }
 }
-
 ```
 
 ---
@@ -241,7 +238,7 @@ public class LIC {
 
     public int doSomething(ArrayList<Integer> A) {
         int x = 0;
-        synchronized (lock) {
+        synchronized (lock) {  // The loop holds the lock unnecessarily
             while (A.get(x) != value) {
                 x++;
             }
@@ -249,6 +246,7 @@ public class LIC {
         }
     }
 }
+
 ```
 
 ### Recommendation:
@@ -262,7 +260,7 @@ public class LIC {
 
     public int doSomething(ArrayList<Integer> A) {
         int x = 0;
-        while (A.get(x) != value) {
+        while (A.get(x) != value) {  // Loop runs outside the critical section
             synchronized (lock) {
                 x++; 
             }
@@ -270,6 +268,7 @@ public class LIC {
         return x;
     }
 }
+
 ```
 
 ---
@@ -286,13 +285,14 @@ public class LOC {
 
     public void doSomething() {
         Boolean x = true;
-        while (x) {
+        while (x) {  // Frequent re-entry into the lock
             synchronized (lock) {
                 x = System.currentTimeMillis() == 123456789;
             }
         }
     }
 }
+
 ```
 
 ### Recommendation:
@@ -306,7 +306,7 @@ public class LOC {
     public void doSomething() {
         int time;
         do {
-            synchronized (lock) {
+            synchronized (lock) {  // Lock acquired fewer times
                 time = System.currentTimeMillis();
             }
         } while (time == 123456789);
